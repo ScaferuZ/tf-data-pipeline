@@ -27,17 +27,17 @@ resource "aws_dynamodb_table" "metadata" {
   }
 }
 
-# s3 bucket
+# s3 bucket -> basically this is the storage for
 resource "aws_s3_bucket" "bucket" {
   bucket = "id-card-uploads"
 }
 
-# sqs
+# sqs -> message queue
 resource "aws_sqs_queue" "queue" {
   name = "s3-event-queue"
 }
 
-# s3 notification to sqs
+# s3 notification to sqs -> basically means that everytime a new object is created, send a message to sqs
 resource "aws_s3_bucket_notification" "bucket_notification" {
   bucket = aws_s3_bucket.bucket.id
 
@@ -45,6 +45,59 @@ resource "aws_s3_bucket_notification" "bucket_notification" {
     queue_arn = aws_sqs_queue.queue.arn
     events    = ["s3:ObjectCreated:*"]
   }
+}
+
+# iam
+
+resource "aws_iam_role" "lambda_role" {
+  name = "lambda_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+
+  })
+}
+
+resource "aws_iam_policy" "lambda_dynamodb_policy" {
+  name        = "lambda_dynamodb_policy"
+  description = "Allows lambda to write to the metadata table"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = aws_dynamodb_table.metadata.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = aws_sqs_queue.queue.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_attach" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = aws_iam_policy.lambda_dynamodb_policy.arn
 }
 
 # lambda
@@ -57,13 +110,13 @@ data "archive_file" "lambda_zip" {
 resource "aws_lambda_function" "processor" {
   filename         = "lambda.zip"
   function_name    = "file_processor"
-  role             = "arn:aws:iam::000000000000:role/irrelevant" # LocalStack skips IAM checks
+  role             = aws_iam_role.lambda_role.arn
   handler          = "index.handler"
   runtime          = "python3.11"
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 }
 
-# sqs trigger for lambda
+# sqs trigger for lambda -> if a message was found in the sqs, wake up lambda and process it
 resource "aws_lambda_event_source_mapping" "sqs_trigger" {
   event_source_arn = aws_sqs_queue.queue.arn
   function_name    = aws_lambda_function.processor.arn
