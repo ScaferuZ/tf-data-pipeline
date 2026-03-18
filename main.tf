@@ -1,5 +1,5 @@
 provider "aws" {
-  region                      = "us-east-1"
+  region                      = var.aws_region
   access_key                  = "test"
   secret_key                  = "test"
   skip_credentials_validation = true
@@ -30,7 +30,7 @@ resource "aws_dynamodb_table" "metadata" {
 
 # s3 bucket -> basically this is the storage for
 resource "aws_s3_bucket" "bucket" {
-  bucket = "id-card-uploads"
+  bucket = var.bucket_name
 }
 
 # sqs -> message queue
