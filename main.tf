@@ -8,11 +8,12 @@ provider "aws" {
   s3_use_path_style           = true
 
   endpoints {
-    s3       = "http://localhost:4566"
-    sqs      = "http://localhost:4566"
-    lambda   = "http://localhost:4566"
-    dynamodb = "http://localhost:4566"
-    iam      = "http://localhost:4566"
+    s3             = "http://localhost:4566"
+    sqs            = "http://localhost:4566"
+    lambda         = "http://localhost:4566"
+    dynamodb       = "http://localhost:4566"
+    iam            = "http://localhost:4566"
+    cloudwatchlogs = "http://localhost:4566"
   }
 }
 
@@ -90,6 +91,15 @@ resource "aws_iam_policy" "lambda_dynamodb_policy" {
           "sqs:GetQueueAttributes"
         ]
         Resource = aws_sqs_queue.queue.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
       }
     ]
   })
@@ -98,6 +108,13 @@ resource "aws_iam_policy" "lambda_dynamodb_policy" {
 resource "aws_iam_role_policy_attachment" "lambda_attach" {
   role       = aws_iam_role.lambda_role.name
   policy_arn = aws_iam_policy.lambda_dynamodb_policy.arn
+}
+
+# cloudwatch
+
+resource "aws_cloudwatch_log_group" "lambda_logs" {
+  name              = "/aws/lambda/${aws_lambda_function.processor.function_name}"
+  retention_in_days = 7
 }
 
 # lambda
