@@ -33,9 +33,19 @@ resource "aws_s3_bucket" "bucket" {
   bucket = var.bucket_name
 }
 
+# dlq to handle errors in the pipeline
+resource "aws_sqs_queue" "dlq" {
+  name = "s3-event-dlq"
+}
+
 # sqs -> message queue
 resource "aws_sqs_queue" "queue" {
   name = "s3-event-queue"
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.dlq.arn
+    maxReceiveCount     = 3
+  })
 }
 
 # s3 notification to sqs -> basically means that everytime a new object is created, send a message to sqs
